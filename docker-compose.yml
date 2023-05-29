@@ -1,6 +1,6 @@
 version: '3.8'
 services:
-  db:
+  auth-db:
     image: postgres:15-alpine
     ports:
       - '5432:5432'
@@ -12,12 +12,13 @@ services:
       interval: 10s
       timeout: 10s
       retries: 5
-  auth:
+  auth-api:
     build:
-      context: ./server/
+      context: ./auth/
       target: production
       dockerfile: ./dockerfile
+    command: yarn start
     ports:
       - 3000:3000
     depends_on:
-      - db
+      - auth-db

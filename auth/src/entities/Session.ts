@@ -15,7 +15,7 @@ export class Session {
 
   @Column({
     type: 'timestamp',
-    default: () => 'CURRENT_TIMESTAMP(6) + INTERVAL "1 MIN"',
+    default: () => 'CURRENT_TIMESTAMP(6) + INTERVAL "15 MIN"',
     name: 'expires_at',
   })
   expires_at: Date;

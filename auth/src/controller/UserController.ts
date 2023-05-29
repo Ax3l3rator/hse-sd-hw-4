@@ -17,9 +17,9 @@ export class UserController {
   private generateAccessToken(user: User, role: Role) {
     const payload = {
       id: user.id,
-      role: role.name,
+      permission_level: role.permission_level,
     };
-    return jwt.sign(payload, secret, { expiresIn: '5m' });
+    return jwt.sign(payload, secret, { expiresIn: '15m' });
   }
 
   async login(request: Request, response: Response, next: NextFunction) {
@@ -41,7 +41,7 @@ export class UserController {
     const session = sessionRepository.create({
       session_token: access_token,
       user: user,
-      expires_at: moment().add(1, 'minute').toDate(),
+      expires_at: moment().add(15, 'minute').toDate(),
     });
 
     sessionRepository.upsert(session, {
@@ -104,24 +104,10 @@ export class UserController {
       throw new RequestDataError('Something went wrong. No idea why', 418);
     }
 
-    const { id, role } = jwt.verify(access_token, secret) as authJwtPayload;
+    const { id, permission_level } = jwt.verify(access_token, secret) as authJwtPayload;
 
-    const returnable = { id: id, role: role };
+    const returnable = { id: id, permission_level: permission_level };
 
     return new RequestDataSucceed(returnable, 200);
   }
-
-  // async remove(request: Request, response: Response, next: NextFunction) {
-  //   const id = parseInt(request.params.id);
-
-  //   let userToRemove = await this.userRepository.findOneBy({ id });
-
-  //   if (!userToRemove) {
-  //     throw Error(`User with id ${id} does not exist`);
-  //   }
-
-  //   await this.userRepository.remove(userToRemove);
-
-  //   return 'user has been removed';
-  // }
 }

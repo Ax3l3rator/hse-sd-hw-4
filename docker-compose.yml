@@ -22,3 +22,22 @@ services:
       - 3000:3000
     depends_on:
       - auth-db
+  orders-db:
+    image: postgres:15-alpine
+    ports:
+      - 5433:5432
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_USER=postgres
+  orders-api:
+    build:
+      context: ./orders/
+      target: production
+      dockerfile: ./dockerfile
+    environment:
+      - PORT=3030
+    ports:
+      - 3030:3030
+    command: yarn start
+    depends_on:
+      - orders-db

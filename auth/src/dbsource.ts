@@ -3,7 +3,7 @@ import { DataSource, Tree } from 'typeorm';
 
 export const source = new DataSource({
   type: 'postgres',
-  host: 'db',
+  host: 'auth-db',
   port: 5432,
   username: 'postgres',
   password: 'postgres',

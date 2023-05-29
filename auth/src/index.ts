@@ -19,31 +19,27 @@ source
     app.use(bodyParser.json());
 
     Routes.forEach((route) => {
-      (app as any)[route.method](
-        route.route,
-        ...route.validation,
-        async (req: Request, res: Response, next: Function) => {
-          try {
-            const errors = validationResult(req);
-            if (!errors.isEmpty()) {
-              return res.status(400).json({
-                validation_errors: errors.array().map((err) => {
-                  if (err.type === 'field') {
-                    err as FieldValidationError;
-                    return `${err.type} ${err.path} ${err.msg}`;
-                  } else {
-                    return err;
-                  }
-                }),
-              });
-            }
-            const result = await new (route.controller as any)()[route.action](req, res, next);
-            res.status(result.statusCode || 200).json(result.message);
-          } catch (error) {
-            next(error);
+      app[route.method](route.route, ...route.validation, async (req: Request, res: Response, next: Function) => {
+        try {
+          const errors = validationResult(req);
+          if (!errors.isEmpty()) {
+            return res.status(400).json({
+              validation_errors: errors.array().map((err) => {
+                if (err.type === 'field') {
+                  err as FieldValidationError;
+                  return `${err.type} ${err.path} ${err.msg}`;
+                } else {
+                  return err;
+                }
+              }),
+            });
           }
+          const result = await new (route.controller as any)()[route.action](req, res, next);
+          res.status(result.statusCode || 200).json(result.message);
+        } catch (error) {
+          next(error);
         }
-      );
+      });
     });
     app.use(handleError);
 

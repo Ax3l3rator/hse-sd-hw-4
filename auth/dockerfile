@@ -17,10 +17,8 @@ ENV NODE_ENV=${NODE_ENV}
 
 WORKDIR /usr/src/app
 
-COPY package.json yarn.lock ./
+COPY package.json ./src/.env yarn.lock ./
 
 RUN yarn install --production --frozen-lockfile
 
 COPY --from=development /usr/src/app/dist ./dist
-
-CMD ["node", "dist/index.js"]

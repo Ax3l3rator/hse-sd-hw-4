@@ -55,27 +55,61 @@ export const Routes: Route[] = [
     route: '/dish/:id',
     controller: DishController,
     action: 'get',
-    validation: [],
+    validation: [param('id').exists().isInt({ min: 1 }).toInt()],
   },
   {
     method: 'post',
-    route: '/dish/:id',
+    route: '/dish/',
     controller: DishController,
     action: 'add',
-    validation: [],
+    validation: [
+      header('authorization')
+        .exists()
+        .withMessage('No authorization header provided')
+        .isString()
+        .withMessage('Authorization must be string')
+        .notEmpty()
+        .withMessage('no token provided'),
+      body('name').exists().isString().trim().notEmpty(),
+      body('description').exists().isString().trim().notEmpty(),
+      body('price').exists().isFloat({ min: 0.01 }).toFloat(),
+      body('quantity').exists().isInt({ min: 0 }).toInt(),
+    ],
   },
   {
     method: 'delete',
     route: '/dish/:id',
     controller: DishController,
     action: 'remove',
-    validation: [],
+    validation: [
+      param('id').exists().isInt({ min: 1 }).toInt(),
+      header('authorization')
+        .exists()
+        .withMessage('No authorization header provided')
+        .isString()
+        .withMessage('Authorization must be string')
+        .notEmpty()
+        .withMessage('no token provided'),
+    ],
   },
   {
     method: 'put',
     route: '/dish/:id',
     controller: DishController,
     action: 'edit',
-    validation: [],
+    validation: [
+      param('id').exists().isInt({ min: 1 }).toInt(),
+      header('authorization')
+        .exists()
+        .withMessage('No authorization header provided')
+        .isString()
+        .withMessage('Authorization must be string')
+        .notEmpty()
+        .withMessage('no token provided'),
+      body('name').isString().trim().notEmpty(),
+      body('description').isString().trim().notEmpty(),
+      body('price').isFloat({ min: 0.01 }).toFloat(),
+      body('quantity').isInt({ min: 0 }).toInt(),
+    ],
   },
 ];

@@ -34,7 +34,4 @@ export class Order {
     default: () => 'CURRENT_TIMESTAMP(6)',
   })
   updated_at: Date;
-
-  @OneToMany(() => OrderDish, (dish) => dish.id)
-  dishes: OrderDish[];
 }

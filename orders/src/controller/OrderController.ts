@@ -26,7 +26,7 @@ export class OrderController extends Controller<Order> {
       throw new RequestDataError('No order with  such id', 400);
     }
     const orderDishRepository = this.getRepository(OrderDish);
-    console.log(order);
+
     const orderDishes: OrderDish[] = await orderDishRepository.find({
       relations: {
         dish: true,
@@ -35,6 +35,7 @@ export class OrderController extends Controller<Order> {
         order: { id: order.id },
       },
     });
+
     const all_dishes = orderDishes.map((orderDish) => {
       return {
         id: orderDish.dish.id,
@@ -69,15 +70,25 @@ export class OrderController extends Controller<Order> {
       special_requests: special_requests || null,
     });
 
-    order.dishes = await this.getOrderDishes(order, dishes);
-
     try {
-      await this.repository.save(order);
+      await this.repository.save(order).then(async (saved) => {
+        try {
+          await this.saveOrderDishes(saved, dishes);
+        } catch (err) {
+          await this.repository.update(saved.id, { status: OrderStatus.canceled });
+          throw new RequestDataError(err);
+        }
+        try {
+          this.cookOrder(order);
+        } catch (err) {
+          await this.repository.update(saved.id, { status: OrderStatus.canceled });
+        }
+      });
     } catch (err) {
       throw new RequestDataError(err.message, 500);
     }
 
-    this.cookOrder(order);
+    // await this.cookOrder(order);
 
     return new RequestDataSucceed('Created order');
   }
@@ -95,47 +106,46 @@ export class OrderController extends Controller<Order> {
     return dishQuantities;
   }
 
-  async getOrderDishes(order: Order, dishes: ApiOrderDish[]) {
+  async saveOrderDishes(order: Order, dishes: ApiOrderDish[]) {
     const dishRepository = this.getRepository(Dish);
     const orderDishRepository = this.getRepository(OrderDish);
     // ? А почему сразу мап не передать? - Потому что ссылки на подобные структуры передавать не очень безопасно и не очень правильно.
     const dishQuantities = await this.parseOrderDishes(dishes);
-
-    const orderDishes: OrderDish[] = [];
     /* 
     ? Что за конструкция нагроможденная? - Ну, нужен был мап, 
     ? чтобы линейно парсить заказы, теперь у нас есть мап, однако так как мы хотим внутри делать все асинхронно, 
     ? просто пройтись форичем по мапу не получится, ведь у нас тут есть момент с бросанием ошибки. Для этого, мы можем замапить мап(ахах да), 
     ? чтобы вернуть много промисов, и выполнить все, а если кто-то упадет, то ошибка будет передана наверх (Welcome to the jungle!)
     */
-    await Promise.all(
-      Array.from(dishQuantities).map(async ([id, quantity]) => {
-        const dishInDB = await dishRepository.findOne({ where: { id } });
 
+    await Promise.all(
+      Array.from(dishQuantities!).map(async ([id, quantity]) => {
+        const dishInDB = await dishRepository.findOne({ where: { id } });
         if (!dishInDB) {
-          throw new RequestDataError('ddddd', 500);
+          throw new RequestDataError('No such dish', 500);
         }
 
-        const OrderDish = orderDishRepository.create({
+        const orderDish = orderDishRepository.create({
           dish: dishInDB,
           quantity,
           order,
           price: quantity * dishInDB.price,
         });
 
-        orderDishes.push(OrderDish);
+        await orderDishRepository.save(orderDish);
       })
     );
-
-    return orderDishes;
   }
 
   async cookOrder(order: Order) {
     const dishRepository = this.getRepository(Dish);
-
+    const orderDishes = await this.getRepository(OrderDish).find({
+      where: { order: { id: order.id } },
+      relations: { order: true, dish: true },
+    });
     await Promise.all(
-      order.dishes.map(async (orderDish) => {
-        const currentDishState = dishRepository.findOne({
+      orderDishes.map(async (orderDish) => {
+        const currentDishState = await dishRepository.findOne({
           where: {
             id: orderDish.dish.id,
             is_available: true,
@@ -146,15 +156,12 @@ export class OrderController extends Controller<Order> {
         if (!currentDishState) {
           throw 'abort';
         }
+
+        const newQuantity = currentDishState.quantity - orderDish.dish.quantity;
+        console.log(newQuantity, currentDishState);
+        await dishRepository.update(currentDishState.id, { quantity: newQuantity, is_available: newQuantity > 0 });
       })
     )
-      .catch(async (err) => {
-        if (err === 'abort') {
-          await this.repository.update(order.id, { status: OrderStatus.canceled });
-        } else {
-          throw new RequestDataError(err, 500);
-        }
-      })
       .then(async () => {
         await this.repository.update(order.id, { status: OrderStatus.cooking });
         await new Promise(function (resolve, reject) {
@@ -163,6 +170,13 @@ export class OrderController extends Controller<Order> {
           }, 5000);
         });
         await this.repository.update(order.id, { status: OrderStatus.completed });
+      })
+      .catch(async (err) => {
+        if (err === 'abort') {
+          await this.repository.update(order.id, { status: OrderStatus.canceled });
+        } else {
+          throw new RequestDataError(err, 500);
+        }
       });
   }
 }

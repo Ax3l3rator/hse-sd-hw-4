@@ -29,30 +29,32 @@ export class DishController extends Controller<Dish> {
     return new RequestDataSucceed(dishes, 200);
   }
 
-  async add(req: Request, res: Response, next: NextFunction) {
-    const dishParams = req.body;
+  async add() {
+    const { name, description, price, quantity } = this.req.body;
 
-    const dish = this.repository.create(dishParams);
+    const dish = this.repository.create({ name, description, price, quantity, is_available: quantity > 0 });
 
     await this.repository.save(dish);
 
     return new RequestDataSucceed('Done');
   }
 
-  async remove(req: Request, res: Response, next: NextFunction) {
-    const { id } = req.body;
-    this.repository.delete(id);
+  async remove() {
+    const { id } = this.req.body;
+    await this.repository.delete(id).catch((err) => {
+      throw new RequestDataError('there is no dish with this id ', 400);
+    });
   }
 
-  async edit(req: Request, res: Response, next: NextFunction) {
+  async edit() {
     const dishId = Number(this.req.params.dish_id);
-    const changes = req.body;
+    const changes = this.req.body;
     await this.repository.update(dishId, changes);
 
     return new RequestDataSucceed('Done');
   }
 
-  async get(req: Request, res: Response, next: NextFunction) {
+  async get() {
     const dishId = Number(this.req.params.dish_id);
 
     if (isNaN(dishId)) {
@@ -64,6 +66,10 @@ export class DishController extends Controller<Dish> {
         id: dishId,
       },
     });
+
+    if (!dish) {
+      throw new RequestDataError('No dish with this id');
+    }
 
     return new RequestDataSucceed(dish);
   }

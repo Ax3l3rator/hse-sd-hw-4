@@ -11,7 +11,7 @@ export class OrderDish {
   @JoinColumn({ name: 'order_id' })
   order: Order;
 
-  @OneToOne(() => Dish, { nullable: false })
+  @ManyToOne(() => Dish, { nullable: false })
   @JoinColumn({ name: 'dish_id' })
   dish: Dish;
 

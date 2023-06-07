@@ -7,12 +7,9 @@ import { OrderDish } from '../entities/OrderDish';
 import axios from 'axios';
 import { Dish } from '../entities/Dish';
 import { In, MoreThanOrEqual } from 'typeorm';
-import { rawListeners } from 'process';
-import { compareSync } from 'bcrypt';
+import { ApiOrderDish } from '../routes';
 
 export class OrderController extends Controller<Order> {
-  private static cooking = false;
-
   constructor(req: Request, res: Response, next: NextFunction) {
     super(Order, req, res, next);
   }
@@ -59,46 +56,20 @@ export class OrderController extends Controller<Order> {
 
   async createOrder() {
     const { dishes, special_requests } = this.req.body;
-    const dishMap = new Map<number, number>(
-      dishes.map((dish) => {
-        return [dish.id, dish.quantity];
-      })
-    );
     const {
-      data: { id, permission_level },
+      data: { id },
     } = await axios
       .get('http://auth-api:3000/user', { headers: { Authorization: this.req.headers.authorization } })
       .catch((error) => {
-        throw new RequestDataError('Bad call to auth', 500);
+        throw new RequestDataError(error, 500);
       });
 
-    const dishRepository = this.getRepository(Dish);
-
-    const orderDishes = await dishRepository.find({
-      where: { id: In(dishes.map((dish) => dish.id)), is_available: true },
-    });
-
-    orderDishes.filter(async (dish) => {
-      if (dish.quantity > dishMap.get(dish.id)) {
-        await dishRepository.update(dish.id, { quantity: dish.quantity - dishMap.get(dish.id) });
-        return true;
-      }
-
-      if (dish.quantity == dishMap.get(dish.id)) {
-        await dishRepository.update(dish.id, { quantity: 0, is_available: false });
-        return true;
-      }
-      return false;
-    });
-
-    if (!orderDishes || orderDishes.length == 0) {
-      throw new RequestDataError('Nothing from the list is available', 400);
-    }
     const order = this.repository.create({
       user_id: id,
-      dishes: orderDishes,
       special_requests: special_requests || null,
     });
+
+    order.dishes = await this.getOrderDishes(order, dishes);
 
     try {
       await this.repository.save(order);
@@ -111,13 +82,87 @@ export class OrderController extends Controller<Order> {
     return new RequestDataSucceed('Created order');
   }
 
-  async cookOrder(order: Order) {
-    await this.repository.update(order.id, { status: OrderStatus.cooking });
-    await new Promise(function (resolve, reject) {
-      setTimeout(async () => {
-        resolve('Cooked');
-      }, 5000);
+  async parseOrderDishes(dishes: ApiOrderDish[]) {
+    const dishQuantities = new Map<number, number>();
+    dishes.forEach((dish) => {
+      if (dishQuantities.has(dish.id)) {
+        dishQuantities.set(dish.id, dishQuantities.get(dish.id) + dish.quantity);
+      } else {
+        dishQuantities.set(dish.id, dish.quantity);
+      }
     });
-    await this.repository.update(order.id, { status: OrderStatus.completed });
+
+    return dishQuantities;
+  }
+
+  async getOrderDishes(order: Order, dishes: ApiOrderDish[]) {
+    const dishRepository = this.getRepository(Dish);
+    const orderDishRepository = this.getRepository(OrderDish);
+    // ? А почему сразу мап не передать? - Потому что ссылки на подобные структуры передавать не очень безопасно и не очень правильно.
+    const dishQuantities = await this.parseOrderDishes(dishes);
+
+    const orderDishes: OrderDish[] = [];
+    /* 
+    ? Что за конструкция нагроможденная? - Ну, нужен был мап, 
+    ? чтобы линейно парсить заказы, теперь у нас есть мап, однако так как мы хотим внутри делать все асинхронно, 
+    ? просто пройтись форичем по мапу не получится, ведь у нас тут есть момент с бросанием ошибки. Для этого, мы можем замапить мап(ахах да), 
+    ? чтобы вернуть много промисов, и выполнить все, а если кто-то упадет, то ошибка будет передана наверх (Welcome to the jungle!)
+    */
+    await Promise.all(
+      Array.from(dishQuantities).map(async ([id, quantity]) => {
+        const dishInDB = await dishRepository.findOne({ where: { id } });
+
+        if (!dishInDB) {
+          throw new RequestDataError('ddddd', 500);
+        }
+
+        const OrderDish = orderDishRepository.create({
+          dish: dishInDB,
+          quantity,
+          order,
+          price: quantity * dishInDB.price,
+        });
+
+        orderDishes.push(OrderDish);
+      })
+    );
+
+    return orderDishes;
+  }
+
+  async cookOrder(order: Order) {
+    const dishRepository = this.getRepository(Dish);
+
+    await Promise.all(
+      order.dishes.map(async (orderDish) => {
+        const currentDishState = dishRepository.findOne({
+          where: {
+            id: orderDish.dish.id,
+            is_available: true,
+            quantity: MoreThanOrEqual(orderDish.quantity),
+          },
+        });
+
+        if (!currentDishState) {
+          throw 'abort';
+        }
+      })
+    )
+      .catch(async (err) => {
+        if (err === 'abort') {
+          await this.repository.update(order.id, { status: OrderStatus.canceled });
+        } else {
+          throw new RequestDataError(err, 500);
+        }
+      })
+      .then(async () => {
+        await this.repository.update(order.id, { status: OrderStatus.cooking });
+        await new Promise(function (resolve, reject) {
+          setTimeout(async () => {
+            resolve('Cooked');
+          }, 5000);
+        });
+        await this.repository.update(order.id, { status: OrderStatus.completed });
+      });
   }
 }

@@ -1,5 +1,6 @@
 import { Column, CreateDateColumn, Entity, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 import { Dish } from './Dish';
+import { OrderDish } from './OrderDish';
 
 export enum OrderStatus {
   waiting = 'waiting',
@@ -34,6 +35,6 @@ export class Order {
   })
   updated_at: Date;
 
-  @OneToMany(() => Dish, (dish) => dish.id)
-  dishes: Dish[];
+  @OneToMany(() => OrderDish, (dish) => dish.id)
+  dishes: OrderDish[];
 }

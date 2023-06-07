@@ -10,7 +10,7 @@ export class DishController extends Controller<Dish> {
     super(Dish, req, res, next);
   }
 
-  async getDishes() {
+  async menu() {
     const perPage = 20;
     const page = Number(this.req.params.page);
 
@@ -29,5 +29,42 @@ export class DishController extends Controller<Dish> {
     return new RequestDataSucceed(dishes, 200);
   }
 
-  async editDishes() {}
+  async add(req: Request, res: Response, next: NextFunction) {
+    const dishParams = req.body;
+
+    const dish = this.repository.create(dishParams);
+
+    await this.repository.save(dish);
+
+    return new RequestDataSucceed('Done');
+  }
+
+  async remove(req: Request, res: Response, next: NextFunction) {
+    const { id } = req.body;
+    this.repository.delete(id);
+  }
+
+  async edit(req: Request, res: Response, next: NextFunction) {
+    const dishId = Number(this.req.params.dish_id);
+    const changes = req.body;
+    await this.repository.update(dishId, changes);
+
+    return new RequestDataSucceed('Done');
+  }
+
+  async get(req: Request, res: Response, next: NextFunction) {
+    const dishId = Number(this.req.params.dish_id);
+
+    if (isNaN(dishId)) {
+      throw new RequestDataError('dish id somehow is NaN', 418);
+    }
+
+    const dish = await this.repository.findOne({
+      where: {
+        id: dishId,
+      },
+    });
+
+    return new RequestDataSucceed(dish);
+  }
 }
